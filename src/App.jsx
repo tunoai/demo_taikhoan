@@ -46,29 +46,43 @@ function App() {
   }, []);
 
   const addTask = async (dayId) => {
-    const newTask = {
-      dayId,
-      content: '',
-      completed: false,
-      color: 'default'
-    };
-    const taskId = Date.now().toString();
-    await setDoc(doc(db, TASKS_COLLECTION, taskId), newTask);
+    try {
+      const newTask = {
+        dayId,
+        content: '',
+        completed: false,
+        color: 'default'
+      };
+      const taskId = Date.now().toString();
+      console.log('Adding task:', taskId, newTask);
+      await setDoc(doc(db, TASKS_COLLECTION, taskId), newTask);
+      console.log('Task added successfully');
+    } catch (error) {
+      console.error('Error adding task:', error);
+    }
   };
 
   const updateTask = async (taskId, field, value) => {
     const task = tasks.find(t => t.id === taskId);
     if (task) {
-      await setDoc(doc(db, TASKS_COLLECTION, taskId), {
-        ...task,
-        id: undefined,
-        [field]: value
-      });
+      try {
+        const { id, ...taskData } = task;
+        await setDoc(doc(db, TASKS_COLLECTION, taskId), {
+          ...taskData,
+          [field]: value
+        });
+      } catch (error) {
+        console.error('Error updating task:', error);
+      }
     }
   };
 
   const deleteTask = async (taskId) => {
-    await deleteDoc(doc(db, TASKS_COLLECTION, taskId));
+    try {
+      await deleteDoc(doc(db, TASKS_COLLECTION, taskId));
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
   };
 
   const totalTasks = tasks.length;
