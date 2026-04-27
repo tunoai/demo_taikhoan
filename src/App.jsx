@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, CheckCircle } from 'lucide-react';
+import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { db } from './firebase';
 import './index.css';
 
 const DAYS = [
@@ -20,58 +22,70 @@ const COLORS = [
   { id: 'blue', value: '#3b82f6', label: 'Ý tưởng' }
 ];
 
-const INITIAL_TASKS = [
-  { id: '1', dayId: 'mon', content: 'Họp team đầu tuần', completed: true, color: 'green' },
-  { id: '2', dayId: 'mon', content: 'Lên plan content tuần', completed: false, color: 'yellow' },
-  { id: '3', dayId: 'tue', content: 'Thiết kế UI/UX', completed: false, color: 'red' },
-  { id: '4', dayId: 'wed', content: 'Review code', completed: false, color: 'default' },
-  { id: '5', dayId: 'thu', content: 'Fix bugs UI', completed: false, color: 'red' },
-  { id: '6', dayId: 'fri', content: 'Deploy lên staging', completed: false, color: 'yellow' },
-  { id: '7', dayId: 'sat', content: 'Nghĩ tính năng mới (AI)', completed: false, color: 'blue' }
-];
+const TASKS_COLLECTION = 'tasks';
 
 function App() {
-  const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem('weekly_tasks');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return INITIAL_TASKS;
-      }
-    }
-    return INITIAL_TASKS;
-  });
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
 
+  // Real-time sync with Firestore
   useEffect(() => {
-    localStorage.setItem('weekly_tasks', JSON.stringify(tasks));
-  }, [tasks]);
+    const unsubscribe = onSnapshot(collection(db, TASKS_COLLECTION), (snapshot) => {
+      const tasksData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setTasks(tasksData);
+      setLoading(false);
+    }, (error) => {
+      console.error('Firestore error:', error);
+      setLoading(false);
+    });
 
-  const addTask = (dayId) => {
+    return () => unsubscribe();
+  }, []);
+
+  const addTask = async (dayId) => {
     const newTask = {
-      id: Date.now().toString(),
       dayId,
       content: '',
       completed: false,
       color: 'default'
     };
-    setTasks([...tasks, newTask]);
+    const taskId = Date.now().toString();
+    await setDoc(doc(db, TASKS_COLLECTION, taskId), newTask);
   };
 
-  const updateTask = (taskId, field, value) => {
-    setTasks(tasks.map(task => 
-      task.id === taskId ? { ...task, [field]: value } : task
-    ));
+  const updateTask = async (taskId, field, value) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      await setDoc(doc(db, TASKS_COLLECTION, taskId), {
+        ...task,
+        id: undefined,
+        [field]: value
+      });
+    }
   };
 
-  const deleteTask = (taskId) => {
-    setTasks(tasks.filter(task => task.id !== taskId));
+  const deleteTask = async (taskId) => {
+    await deleteDoc(doc(db, TASKS_COLLECTION, taskId));
   };
 
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter(t => t.completed).length;
   const uncompletedTasks = totalTasks - completedTasks;
   const progressPercent = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+
+  if (loading) {
+    return (
+      <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <div style={{ textAlign: 'center', color: '#94a3b8' }}>
+          <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>⏳ Đang tải dữ liệu...</div>
+          <div style={{ fontSize: '0.85rem' }}>Kết nối Firebase</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
