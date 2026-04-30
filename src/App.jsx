@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, CheckCircle, Crown, Loader, LogOut, Lock, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, Crown, Loader, LogOut, Lock, ArrowLeft, LogIn } from 'lucide-react';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from './firebase';
 import './index.css';
@@ -31,6 +31,7 @@ function App() {
   // Mock State
   const [user, setUser] = useState(null);
   const [isPro, setIsPro] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState(1);
   const [isPaying, setIsPaying] = useState(false);
@@ -41,7 +42,10 @@ function App() {
 
   // Real-time sync with Firestore
   useEffect(() => {
-    if (!user) return; // Only load tasks if logged in
+    if (!user) {
+      setTasks([]);
+      return;
+    }
     
     setLoading(true);
     const unsubscribe = onSnapshot(collection(db, TASKS_COLLECTION), (snapshot) => {
@@ -63,7 +67,13 @@ function App() {
     e.preventDefault();
     if (email) {
       setUser({ email });
+      setShowLoginModal(false);
     }
+  };
+
+  const handleGoogleLogin = () => {
+    setUser({ email: 'guest@google.com' });
+    setShowLoginModal(false);
   };
 
   const handleLogout = () => {
@@ -84,7 +94,12 @@ function App() {
   };
 
   const addTask = async (dayId) => {
-    if (!isPro && tasks.length >= 5) {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+
+    if (!isPro && tasks.length >= 6) {
       setShowPaymentModal(true);
       return;
     }
@@ -126,45 +141,9 @@ function App() {
     }
   };
 
-  // Render Login Screen if not logged in
-  if (!user) {
-    return (
-      <div className="login-screen">
-        <div className="login-card">
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-            <CheckCircle color="#4f46e5" size={48} />
-          </div>
-          <h1 className="login-title">Đăng nhập / Đăng ký</h1>
-          <p className="login-desc">Quản lý công việc tuần hiệu quả hơn</p>
-          
-          <form onSubmit={handleLogin}>
-            <input 
-              type="email" 
-              className="login-input" 
-              placeholder="Email của bạn" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required 
-            />
-            <input 
-              type="password" 
-              className="login-input" 
-              placeholder="Mật khẩu" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required 
-            />
-            <button type="submit" className="login-btn">Vào ứng dụng</button>
-          </form>
-          <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            *Nhập email bất kỳ để test (Mockup)
-          </div>
-        </div>
-      </div>
-    );
-  }
 
-  if (loading) {
+
+  if (user && loading) {
     return (
       <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         <div style={{ textAlign: 'center', color: '#94a3b8' }}>
@@ -192,17 +171,23 @@ function App() {
           </div>
           
           <div className="user-info">
-            <div style={{ fontSize: '0.9rem', fontWeight: '500' }}>{user.email}</div>
-            
-            {!isPro && (
-              <button className="upgrade-btn" onClick={() => setShowPaymentModal(true)}>
-                <Crown size={16} /> Nâng cấp Pro
+            {user ? (
+              <>
+                <div style={{ fontSize: '0.9rem', fontWeight: '500' }}>{user.email}</div>
+                {!isPro && (
+                  <button className="upgrade-btn" onClick={() => setShowPaymentModal(true)}>
+                    <Crown size={16} /> Nâng cấp Pro
+                  </button>
+                )}
+                <button className="logout-btn" onClick={handleLogout} title="Đăng xuất">
+                  <LogOut size={16} />
+                </button>
+              </>
+            ) : (
+              <button className="upgrade-btn" style={{ background: 'var(--primary)', boxShadow: 'none' }} onClick={() => setShowLoginModal(true)}>
+                <LogIn size={16} /> Đăng nhập
               </button>
             )}
-            
-            <button className="logout-btn" onClick={handleLogout} title="Đăng xuất">
-              <LogOut size={16} />
-            </button>
           </div>
         </div>
 
@@ -212,7 +197,7 @@ function App() {
               <span className="stat-label">Tổng</span>
               <span className="stat-value">
                 {totalTasks}
-                {!isPro && <span style={{fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'normal'}}> / 5</span>}
+                {user && !isPro && <span style={{fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'normal'}}> / 6</span>}
               </span>
             </div>
             <div className="stat-item">
@@ -300,8 +285,8 @@ function App() {
                 className="add-task-btn"
                 onClick={() => addTask(day.id)}
               >
-                {!isPro && tasks.length >= 5 ? <Lock size={18} color="var(--color-red)" /> : <Plus size={18} />}
-                {(!isPro && tasks.length >= 5) ? 'Đã đạt giới hạn' : 'Thêm task'}
+                {!user ? <Plus size={18} /> : (!isPro && tasks.length >= 6 ? <Lock size={18} color="var(--color-red)" /> : <Plus size={18} />)}
+                {!user ? 'Thêm task' : (!isPro && tasks.length >= 6 ? 'Đã đạt giới hạn' : 'Thêm task')}
               </button>
               <div style={{ height: '1rem' }}></div>
             </div>
@@ -325,9 +310,9 @@ function App() {
                 </div>
                 <h2 className="paywall-title">Nâng cấp lên gói PRO</h2>
                 <p className="paywall-desc">
-                  Bạn đã đạt giới hạn 5 công việc của bản Free. <br/>
-                  Nâng cấp ngay để mở khóa toàn bộ tính năng!
-                </p>
+              Bạn đã đạt giới hạn 6 công việc của bản Free. <br/>
+              Nâng cấp ngay để mở khóa toàn bộ tính năng!
+            </p>
                 
                 <div className="pricing-card">
                   <div className="price-amount">149.000đ</div>
@@ -392,6 +377,57 @@ function App() {
             
             <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               *Đây là màn hình mô phỏng luồng thanh toán.
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="modal-overlay">
+          <div className="login-card" style={{ position: 'relative' }}>
+            <button className="close-btn" onClick={() => setShowLoginModal(false)}>×</button>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+              <CheckCircle color="#4f46e5" size={48} />
+            </div>
+            <h1 className="login-title">Đăng nhập / Đăng ký</h1>
+            <p className="login-desc">Quản lý công việc tuần hiệu quả hơn</p>
+            
+            <form onSubmit={handleLogin}>
+              <input 
+                type="email" 
+                className="login-input" 
+                placeholder="Email của bạn" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required 
+              />
+              <input 
+                type="password" 
+                className="login-input" 
+                placeholder="Mật khẩu" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required 
+              />
+              <button type="submit" className="login-btn">Đăng nhập bằng Email</button>
+            </form>
+
+            <div className="divider">
+              <span>HOẶC</span>
+            </div>
+
+            <button type="button" className="google-btn" onClick={handleGoogleLogin}>
+              <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              Đăng nhập với Google
+            </button>
+            
+            <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              *Bản mô phỏng: Nhấn nút trên để đăng nhập ngay.
             </div>
           </div>
         </div>
